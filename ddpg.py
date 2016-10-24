@@ -4,11 +4,14 @@ Implementation of DDPG - Deep Deterministic Policy Gradient
 Algorithm and hyperparameter details can be found here:
     http://arxiv.org/pdf/1509.02971v2.pdf
 
+Removed the dependency on tflearn
+Modified By: Yue Pan
+Original Author: Patrick Emami
+
 """
 import tensorflow as tf
 import numpy as np
 import gym
-#import tflearn
 
 from replay_buffer import ReplayBuffer
 
@@ -16,7 +19,7 @@ from replay_buffer import ReplayBuffer
 #   Training Parameters
 # ==========================
 # Max training steps
-MAX_EPISODES = 50000
+MAX_EPISODES = 10
 # Max episode length
 MAX_EP_STEPS = 1000
 # Base learning rate for the Actor network
@@ -32,15 +35,15 @@ TAU = 0.001
 #   Utility Parameters
 # ===========================
 # Render gym env during training
-RENDER_ENV = True
+RENDER_ENV = False
 # Use Gym Monitor
-GYM_MONITOR_EN = True
+GYM_MONITOR_EN = False
 # Gym environment
 ENV_NAME = 'Pendulum-v0'
 # Directory for storing gym results
-MONITOR_DIR = './results/gym_ddpg'
+MONITOR_DIR = './results/gym'
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/tf_ddpg'
+SUMMARY_DIR = './results/tf'
 RANDOM_SEED = 1234
 # Size of replay buffer
 BUFFER_SIZE = 10000
@@ -95,19 +98,19 @@ class ActorNetwork(object):
 
     def create_actor_network(self):
         #inputs = tflearn.input_data(shape=[None, self.s_dim])
-        inputs = tf.placeholder(tf.float32, shape=[None, self.s_dim])
+        inputs = tf.placeholder(tf.float32, shape=[None, self.s_dim], name="state")
         #net = tflearn.fully_connected(inputs, 400, activation='relu')
         net = tf.contrib.layers.fully_connected(\
             inputs=inputs,
-            num_outputs=300,
+            num_outputs=400,
             activation_fn=tf.nn.relu,
-            weights_initializer=tf.contrib.layers.xavier_initializer())
+            weights_initializer=tf.truncated_normal_initializer())
         #net = tflearn.fully_connected(net, 300, activation='relu')
         net = tf.contrib.layers.fully_connected(\
             inputs=net,
             num_outputs=300,
             activation_fn=tf.nn.relu,
-            weights_initializer=tf.contrib.layers.xavier_initializer())
+            weights_initializer=tf.truncated_normal_initializer())
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         #w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         #sut = tflearn.fully_connected(net, self.a_dim, activation='tanh', weights_init=w_init)
@@ -183,22 +186,22 @@ class CriticNetwork(object):
     def create_critic_network(self):
         #inputs = tflearn.input_data(shape=[None, self.s_dim])
         #action = tflearn.input_data(shape=[None, self.a_dim])
-        inputs = tf.placeholder(tf.float32, shape=[None, self.s_dim])
-        action = tf.placeholder(tf.float32, shape=[None, self.a_dim])
+        inputs = tf.placeholder(tf.float32, shape=[None, self.s_dim], name="state")
+        action = tf.placeholder(tf.float32, shape=[None, self.a_dim], name="action")
         #net = tflearn.fully_connected(inputs, 400, activation='relu')
         net = tf.contrib.layers.fully_connected(\
             inputs=inputs,
             num_outputs=400,
             activation_fn=tf.nn.relu,
-            weights_initializer=tf.contrib.layers.xavier_initializer())
+            weights_initializer=tf.truncated_normal_initializer())
         # Add the action tensor in the 2nd hidden layer
         # Use two temp layers to get the corresponding weights and biases
         #t1 = tflearn.fully_connected(net, 300)
         #t2 = tflearn.fully_connected(action, 300)
-        t1w = tf.Variable(tf.random_uniform([400, 300]))
-        t2w = tf.Variable(tf.random_uniform([self.a_dim, 300]))
-        t2b = tf.Variable(tf.random_uniform([1, 300]))
-        net = tf.nn.relu(tf.matmul(net,t1w) + tf.matmul(action, t2w) + t2b)
+        t1w = tf.Variable(tf.random_uniform([400, 300]), name="t1w")
+        t2w = tf.Variable(tf.random_uniform([self.a_dim, 300]), name="t2w")
+        t2b = tf.Variable(tf.random_uniform([1, 300]), name="t2b")
+        net = tf.nn.relu(tf.add(tf.add(tf.matmul(net,t1w), tf.matmul(action, t2w)), t2b))
 
         # linear layer connected to 1 output representing Q(s,a)
         # Weights are init to Uniform[-3e-3, 3e-3]
@@ -335,7 +338,7 @@ def train(sess, env, actor, critic):
                 writer.flush()
 
                 print('\r| Reward: %.2i' % int(ep_reward), " | Episode", i, \
-                    '| Qmax: %.4f' % (ep_ave_max_q / float(j)))
+                    '| Qmax: %.4f' % (ep_ave_max_q / float(j)), end="")
 
                 break
 def main(_):

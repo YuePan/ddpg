@@ -20,7 +20,7 @@ from replay_buffer import ReplayBuffer
 #   Training Parameters
 # ==========================
 # Max training steps
-MAX_EPISODES = 50000
+MAX_EPISODES = 10
 # Max episode length
 MAX_EP_STEPS = 1000
 # Base learning rate for the Actor network
@@ -36,9 +36,9 @@ TAU = 0.001
 #   Utility Parameters
 # ===========================
 # Render gym env during training
-RENDER_ENV = True
+RENDER_ENV = False
 # Use Gym Monitor
-GYM_MONITOR_EN = True
+GYM_MONITOR_EN = False
 # Gym environment
 ENV_NAME = 'Pendulum-v0'
 # Directory for storing gym results
@@ -98,12 +98,13 @@ class ActorNetwork(object):
         self.num_trainable_vars = len(self.network_params) + len(self.target_network_params)
 
     def create_actor_network(self): 
-        inputs = tflearn.input_data(shape=[None, self.s_dim])
+        inputs = tflearn.input_data(shape=[None, self.s_dim], name='state')
         net = tflearn.fully_connected(inputs, 400, activation='relu')
         net = tflearn.fully_connected(net, 300, activation='relu')
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        out = tflearn.fully_connected(net, self.a_dim, activation='tanh', weights_init=w_init)
+        out = tflearn.fully_connected(net, self.a_dim, activation='tanh',
+                                      weights_init=w_init, name='actor_out')
         scaled_out = tf.mul(out, self.action_bound) # Scale output to -action_bound to action_bound
         return inputs, out, scaled_out 
 
@@ -168,21 +169,21 @@ class CriticNetwork(object):
         self.action_grads = tf.gradients(self.out, self.action)
 
     def create_critic_network(self):
-        inputs = tflearn.input_data(shape=[None, self.s_dim])
-        action = tflearn.input_data(shape=[None, self.a_dim])
+        inputs = tflearn.input_data(shape=[None, self.s_dim], name='state')
+        action = tflearn.input_data(shape=[None, self.a_dim], name='action')
         net = tflearn.fully_connected(inputs, 400, activation='relu')
 
         # Add the action tensor in the 2nd hidden layer
         # Use two temp layers to get the corresponding weights and biases
-        t1 = tflearn.fully_connected(net, 300)
-        t2 = tflearn.fully_connected(action, 300)
+        t1 = tflearn.fully_connected(net, 300, name='t1')
+        t2 = tflearn.fully_connected(action, 300, name='t2')
 
         net = tflearn.activation(tf.matmul(net,t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
 
         # linear layer connected to 1 output representing Q(s,a) 
         # Weights are init to Uniform[-3e-3, 3e-3]
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        out = tflearn.fully_connected(net, 1, weights_init=w_init)
+        out = tflearn.fully_connected(net, 1, weights_init=w_init, name='critic_out')
         return inputs, action, out
 
     def train(self, inputs, action, predicted_q_value):
@@ -308,8 +309,8 @@ def train(sess, env, actor, critic):
                 writer.add_summary(summary_str, i)
                 writer.flush()
 
-                print('| Reward: %.2i' % int(ep_reward), " | Episode", i, \
-                    '| Qmax: %.4f' % (ep_ave_max_q / float(j)))
+                print('\r| Reward: %.2i' % int(ep_reward), " | Episode", i, \
+                    '| Qmax: %.4f' % (ep_ave_max_q / float(j)), end="")
 
                 break
 def main(_):
